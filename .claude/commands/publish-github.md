@@ -81,8 +81,21 @@ and call `https://api.github.com` with `curl -H "Authorization: Bearer $TOKEN" -
 
 If the token lacks permission (403/404 on a repo you can push to), tell the user exactly which setting to change by hand: **Settings → Pages → Source: GitHub Actions**, and the ⚙ next to **About** on the repo page.
 
-## 6. Verify and report
+## 6. Verify the deployment
 
 - Poll `GET /repos/OWNER/REPO/actions/runs?per_page=1` until the latest run completes (time out after ~8 minutes). Report the `conclusion`. On failure, fetch the failed job's log, and fix and re-push if the cause is in the workflow.
 - Check that the Pages URL returns HTTP 200 (allow a minute after deploy for propagation).
-- Finish with a short summary: the repo URL, the **live Pages URL**, the commits pushed, scan results (clean, or what was flagged and how it was resolved), and anything the user still has to do by hand.
+## 7. Capture a screenshot and add it to the README
+
+Use the **Playwright MCP** server (`playwright` in `.mcp.json`). If its `browser_*` tools are not available in this session, tell the user to reload the window and approve the `playwright` server, then skip this step. Do not swap in another screenshot method without asking.
+
+1. `browser_navigate` to the live Pages URL. If the page isn't live yet (first publish), use the local `file:///<absolute path>/index.html` instead.
+2. `browser_resize` to 1440×900 and wait until the main content has rendered (`browser_snapshot` or `browser_wait_for` on visible text).
+3. `browser_take_screenshot` (PNG, viewport, not full page). Move or copy the file the tool reports into `docs/screenshot.png`, replacing any existing one.
+4. Open the PNG to check it shows the real page (not blank, an error page or a cookie banner). Then `browser_close`.
+5. In `README.md`, add or replace a `![<Project name> screenshot](docs/screenshot.png)` line directly under the **Live demo** link. Never add a second screenshot line.
+6. Make sure `.playwright-mcp/` is in `.gitignore`. Re-run the step 1 scan on the new files (the screenshot must not show secrets or personal data). Then commit `docs/screenshot.png` and `README.md` and push. Confirm that the Pages run this push triggers also succeeds.
+
+## 8. Report
+
+- Finish with a short summary: the repo URL, the **live Pages URL**, the commits pushed, scan results (clean, or what was flagged and how it was resolved), whether the screenshot was added, and anything the user still has to do by hand.

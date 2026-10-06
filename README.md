@@ -4,6 +4,8 @@ A single-page Kanban board for a fictitious bank's internal IT Project Managemen
 
 **Live demo:** https://super211.github.io/kanban/
 
+![IT PMO Kanban Board screenshot](docs/screenshot.png)
+
 > Demo mode: the board lives in memory only. Refreshing the page resets it to the eight sample tasks.
 
 ## Features
