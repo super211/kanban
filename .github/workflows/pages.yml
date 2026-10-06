@@ -5,6 +5,7 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Least privilege: the token can read the repo and publish Pages, nothing else
 permissions:
   contents: read
   pages: write
@@ -21,7 +22,14 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      # Actions are pinned to full commit SHAs (supply-chain hardening); the
+      # comment shows the release tag each SHA was resolved from.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Verify CSP hashes match the inline script and style
+        run: node scripts/csp-hash.mjs --check
 
       - name: Stage site files
         run: |
@@ -29,11 +37,11 @@ jobs:
           cp index.html _site/
           touch _site/.nojekyll
 
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         with:
           path: _site
 
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

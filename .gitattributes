@@ -1,0 +1,3 @@
+# Keep LF everywhere so the inline-script CSP hashes are stable across platforms
+* text=auto eol=lf
+*.png binary
