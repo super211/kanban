@@ -12,7 +12,7 @@ A single-file IT PMO Kanban board (`index.html`) for a fictitious bank's interna
 - No external resources: no CDNs, web fonts or image files. Use the system font stack and inline SVG/Unicode for icons.
 - **No persistence**: no localStorage, sessionStorage, IndexedDB or cookies. A refresh resets to the seed data, which is intended (the UI has a note saying so).
 - The only network call is FormSubmit's AJAX endpoint. A FormSubmit failure must never break the board.
-- Branding: use a neutral "IT PMO" wordmark and the pink palette defined as `:root` tokens (every text pair checked to WCAG AA contrast; keep it that way). Do not use a real bank's logo or imitate an official system. Task IDs use the spec-mandated `UOB-ITPM-####` format (`ID_PREFIX`).
+- Branding: use a neutral "IT PMO" wordmark and the corporate blue palette defined as `:root` tokens (every text pair checked to WCAG AA contrast; keep it that way). Do not use a real bank's logo or imitate an official system. Task IDs use the spec-mandated `UOB-ITPM-####` format (`ID_PREFIX`).
 - CSS: use custom properties on `:root` for colours and spacing. No `!important`.
 
 ## Commands
@@ -27,14 +27,19 @@ node scripts/csp-hash.mjs --check  # verify (the Pages workflow runs this and fa
 node -e "const h=require('fs').readFileSync('index.html','utf8');new Function(h.match(/<script>([sS]*?)</script>/)[1]);console.log('ok')"   # syntax check
 ```
 
-The page must contain exactly one `<script>` and one `<style>` element. Don't write those literal tags inside HTML comments, because the hash script matches on them. Don't add inline `style=""` attributes or `on*=` handlers either: the CSP blocks them. Set styles from JS through the `element.style` property instead.
+The page must contain exactly one `<script>` and one `<style>` element. Don't write those literal tags inside HTML comments, because the hash script matches on them. Don't add inline `style=""` attributes or `on*=` handlers either: the CSP blocks them. Set styles from JS through the `element.style` property instead; the charts do this with `data-pct` and `data-grow`.
+
+**Trusted Types is enforced.** Write HTML only through `setHTML(el, html)`. Raw `innerHTML`/`insertAdjacentHTML`, `script.textContent`, or creating any other Trusted Types policy will throw. Use `textContent` for plain text.
 
 Playwright MCP blocks `file:` URLs. To test in a browser, serve the folder over `http://127.0.0.1` with any static server.
 
 ## Architecture (inside the `<script>` block)
 
-- **Single source of truth**: `state = { tasks, filters, ui, activity, notify, nextId }`. `state.ui` holds transient UI: `moveMenuId` (open "Move ▸" menu), `confirmDeleteId` (inline "Delete? Yes / No") and `dragId` (the card currently being dragged). `state.activity` is the in-memory audit log, written via `logActivity()` by every mutation. `state.notify` tracks email rate limiting.
-- **Render from state only**: mutations go through `addTask()`, `moveTask()` and `deleteTask()`, then call `renderBoard()`. `renderBoard()` rebuilds each column's list from `renderCard()` HTML strings, sorted by `sortTasks()`. It also updates the WIP indicators (`WIP_LIMITS`) and calls `renderSummary()` (header strip and Done % progress) and `renderActivity()`. Do not mutate card contents anywhere else. The only DOM changes outside it are the drag/drop highlight classes and toasts.
+- **Startup**: `init()` first calls `refuseIfFramed()`, a clickjacking defence that replaces the page with an "open in a new tab" link when framed. It then binds the security monitor, seeds the tasks and renders.
+- **Single source of truth**: `state = { tasks, filters, ui, activity, notify, nextId }`. `state.ui` holds transient UI: `moveMenuId` (open "Move ▸" menu), `confirmDeleteId` (inline "Delete? Yes / No") and `dragId` (the card currently being dragged). `state.activity` is the in-memory audit log, written via `logActivity()` by every mutation. `state.notify` tracks email rate limiting. `logActivity(text, { security: true })` marks security events, which come from the `securitypolicyviolation` listener and the honeypot.
+- **Render from state only**: mutations go through `addTask()`, `moveTask()` and `deleteTask()`, then call `renderBoard()`. `renderBoard()` rebuilds each column's list from `renderCard()` HTML strings, sorted by `sortTasks()`. It also updates the WIP indicators (`WIP_LIMITS`) and calls `renderSummary()` (header strip), `renderAnalytics()` and `renderActivity()`.
+- **Board Analytics**: `computeAnalytics()` is pure over all tasks (it ignores the filters). `renderAnalytics()` draws the KPI cards, the status stacked bar, the bar rows and the table view. Bar rows with a `filter` are buttons carrying `data-filter-key`/`data-filter-value`; clicking one toggles that board filter, and `renderBoard()` restores focus to it. Chart colours are `--series-*` tokens (one per column, shared with the column accents) and `--due-*` tokens, validated with the dataviz validator. Keep that fixed order and keep the direct labels and table view, because two of the slots are below 3:1 contrast.
+- **Card ageing**: tasks carry `statusSince` (`YYYY-MM-DD`), reset in `addTask()`/`moveTask()`. `daysInColumn()` feeds the card label, the "Longest in column" sort and the average-age KPI. Do not mutate card contents anywhere else. The only DOM changes outside it are the drag/drop highlight classes and toasts.
 - **Focus restoration**: re-rendering replaces card DOM, so interactive card controls carry `data-focus-key`. `renderBoard(focusKey)` focuses that key afterwards, or restores the previously focused key. Keep this pattern when adding card controls, or keyboard users lose focus.
 - **Event delegation**: one click listener on `#board` dispatches on `data-action` (`toggle-move`, `move`, `ask-delete`, `cancel-delete`, `confirm-delete`). Escape closes open menus. HTML5 drag-and-drop is also delegated on `#board`, keyed by `.column[data-status]`. Drops are honoured only when `state.ui.dragId` is set, meaning the drag started on one of the board's own cards; external drops are ignored.
 - **Escaping**: every user-supplied string inserted into HTML must go through `escapeHtml()`.

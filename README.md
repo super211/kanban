@@ -10,21 +10,29 @@ A single-page Kanban board for a fictitious bank's internal IT Project Managemen
 
 ## Features
 
+### Board Analytics
+A collapsible panel above the search bar. It covers every task on the board and updates live.
+- **KPI cards**: completion %, open overdue tasks, WIP utilisation (In Progress against its limit), the share of open work that is blocked, and average days in the current column.
+- **Charts**: tasks by status (a single bar split by column, with a legend and direct labels); open tasks by priority; a due-date outlook (overdue / next 7 days / 8–30 days / later); open workload by assignee; and open tasks by project.
+- **Click a bar** to filter the board by that priority, assignee or project. Click it again to clear the filter.
+- **Accessibility**: tooltips work on hover and keyboard focus, and a **Show data as tables** view gives the same numbers as text. Chart colours were checked with a colour-blindness validator, and each board column uses the same colour on the board and in the chart.
+
 ### Board
 - **Four columns** with a live count on each. They sit side by side on wide screens, two per row on medium screens, and one per row below 768px.
 - **WIP limits**: In Progress allows 4 tasks and Blocked allows 3. The column shows `WIP n / limit` and turns red when over. Moving a card into a full column is still allowed, but shows a warning.
 - **Task cards** show the task ID (`UOB-ITPM-####`), title, description, project, assignee, a priority pill, the due date with a relative label ("in 3 days", "2 days overdue") and a category tag.
 - **Priority colours**: the card's left border is red for Critical, amber for High, purple for Medium and grey for Low. The priority is always shown as text too.
 - **Due-date badges**: **Overdue** for tasks past their due date, and **Due soon** for tasks due within 3 days. Done tasks get neither.
+- **Card ageing**: each open card shows how many days it has been in its column. ⏳ marks cards that have been there 7 days or more. You can also sort by "Longest in column".
 - **Moving cards**: drag and drop with the native HTML5 API, or use the keyboard-friendly **Move ▸** menu on every card. Escape closes open menus.
 - **Inline delete confirmation**: "Delete? Yes / No" appears on the card itself, with no browser pop-up.
-- **Header**: totals per status, an overdue count and a **Done %** progress bar.
+- **Header**: totals per status and an overdue count.
 - **Activity log**: a list of board changes for the current session (created, moved, deleted, with times).
 
 ### Finding work
 - **Search** by task ID, title or description.
 - **Filters** by project, by assignee (any name containing the text you type) and by priority.
-- **Sorting** by priority then due date, by due date alone, or by task ID.
+- **Sorting** by priority then due date, by due date alone, by longest in column, or by task ID.
 
 ### Adding tasks
 - A side panel with validation errors shown under each field. The due date must be a real date, not in the past, and no more than 5 years ahead.
@@ -42,17 +50,19 @@ The design was threat-modelled with STRIDE. The controls below are layered on to
 
 | Threat | Control |
 |---|---|
-| Injected script (XSS) | Every user string goes through `escapeHtml()`. A strict **Content-Security-Policy** only allows the exact inline script and style blocks (SHA-256 hashes), sends data only to `formsubmit.co`, and blocks inline event handlers, `eval`, plugins and `<base>`. |
-| Sensitive data leaking to a third party | A **sensitive-data guard** blocks submissions containing payment card numbers (Luhn check), NRIC/FIN-style IDs, passwords or secrets, API keys or tokens, JWTs or private keys. A banner warns users not to enter customer data. |
+| Injected script (XSS) | Every user string goes through `escapeHtml()`. A strict **Content-Security-Policy** only allows the exact inline script and style blocks (SHA-256 hashes), sends data only to `formsubmit.co`, and blocks inline event handlers, `eval`, plugins and `<base>`. **Trusted Types** (`require-trusted-types-for 'script'`) means HTML can only be written through the app's own `kanban-html` policy. Any other `innerHTML` or script-text write, or a second policy, is refused (enforced in Chromium-based browsers). |
+| Sensitive data leaking to a third party | A **sensitive-data guard** blocks submissions containing payment card numbers (Luhn check), IBAN-style bank account numbers, NRIC/FIN-style IDs, passwords or secrets, API keys or tokens, JWTs or private keys. A banner warns users not to enter customer data. |
 | Disguised text | Text is normalised (Unicode NFC), and control characters and bidi-override characters are removed. These can make text look different from what it really contains. |
 | Inbox flooding | Emails are rate-limited: one every 15 seconds and at most 20 per session. Requests time out after 10 seconds. A hidden honeypot field stops simple bots from sending email. |
 | Data sent to the wrong place, or leaking | The endpoint must start with `https://formsubmit.co/ajax/`. Requests send no cookies and no referrer, and refuse redirects. `<meta name="referrer" content="no-referrer">` is set for the page. |
 | Forged drag-and-drop | A drop only counts if the drag started on one of the board's own cards. Text dragged in from other apps or pages is ignored. |
-| No record of changes | An in-memory activity log records every create, move and delete. |
+| Clickjacking | GitHub Pages can't send `frame-ancestors`, so the app refuses to run inside a frame and shows an "open in a new tab" link instead. |
+| No record of changes, and nothing noticing attacks | An in-memory activity log records every create, move and delete. Every CSP or Trusted Types violation, and every honeypot hit, is logged there as a red **Security** entry. |
+| Resource exhaustion | The board holds at most 200 tasks, and the toast and activity lists are capped. |
 | Compromised CI dependencies | The deploy workflow pins every action to a full commit SHA, doesn't keep the GitHub token after checkout, has only the permissions Pages needs, and fails if the CSP hashes are out of date. |
 
 **Remaining risks:**
-- **Clickjacking:** GitHub Pages can't send HTTP headers, so `frame-ancestors` and `X-Frame-Options` aren't available. Host it somewhere that can send headers if this matters.
+- **Clickjacking:** the frame check runs in JavaScript. An attacker's page that sandboxes the frame with scripts disabled stops it running, but the app then can't run either. A host that can send `frame-ancestors` headers would be stronger.
 - **Inbox address:** the address in `FORMSUBMIT_ENDPOINT` is visible in the page source. Use the random alias FormSubmit gives you after activation instead of the real address.
 - **Bypassable checks:** all of these checks run in the browser, so anyone with developer tools can skip them. A production system needs the same checks on the server.
 
