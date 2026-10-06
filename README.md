@@ -29,6 +29,11 @@ A collapsible panel above the search bar. It covers every task on the board and 
 - **Header**: totals per status and an overdue count.
 - **Activity log**: a list of board changes for the current session (created, moved, deleted, with times).
 
+### Event announcement
+- After **10 seconds** on the page, a popup announces the **IT Project Briefing** on **Wednesday 7 October 2026 at 2:00 pm** in the **Town Hall Meeting Room**.
+- It appears once per visit. Only time while the tab is visible counts, and it waits until the user isn't dragging a card or typing. After the briefing has started it no longer appears.
+- It is an accessible modal dialog: focus moves to **Got it**, and Escape, the × button or a click outside closes it.
+
 ### Finding work
 - **Search** by task ID, title or description.
 - **Filters** by project, by assignee (any name containing the text you type) and by priority.
@@ -87,6 +92,8 @@ const FORMSUBMIT_ENDPOINT = "https://formsubmit.co/ajax/YOUR_EMAIL@example.com";
 ```
 
 Replace `YOUR_EMAIL@example.com` with the inbox that should receive new-task notifications. Then update the CSP hashes (see above).
+
+The event popup is set by the `BRIEFING` constant just below it: `title`, `start` (local time, `YYYY-MM-DDTHH:MM`), `location` and `showAfterMs`. Update the CSP hashes after changing it as well.
 
 **FormSubmit activation (one-time):** the first submission sends a confirmation email to that address. Notifications are only delivered after you click the activation link in it. FormSubmit then gives you a random alias. Put the alias in place of the email address so the address isn't public. Until activation, adding a task shows "Card added locally — email notification failed", and the card stays on the board.
 

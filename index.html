@@ -11,7 +11,7 @@
   `node scripts/csp-hash.mjs` to update the hashes, or the browser will block the block.
   (frame-ancestors cannot be set from a meta tag; the script refuses to run framed instead.)
 -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-iHBmfmXI6TUV+LYX3MDjbfJuBs+p0qUZykkdzkRCZE0='; style-src 'sha256-xzHaf6yPkAcMP1BIEGB1KxrMKFlsChm66kUwZpeHBrE='; img-src data:; connect-src https://formsubmit.co; base-uri 'none'; form-action 'none'; object-src 'none'; require-trusted-types-for 'script'; trusted-types kanban-html">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Qazz0vDFnO1njRN4Q/PJcWcBs0E9LwGi6zJdckCFoo8='; style-src 'sha256-PRqZyP+UwEXqBNwVARU8pJhMhaJYGqDQ81GrY/URMVs='; img-src data:; connect-src https://formsubmit.co; base-uri 'none'; form-action 'none'; object-src 'none'; require-trusted-types-for 'script'; trusted-types kanban-html">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light">
@@ -671,6 +671,40 @@
   .activity li.is-security span { color: var(--critical); font-weight: 650; }
 
   /* =========================================================
+     Event announcement dialog (IT Project Briefing)
+     ========================================================= */
+  .briefing {
+    width: min(440px, calc(100vw - 2 * var(--space-4)));
+    border: 0;
+    border-top: 5px solid var(--brand-500);
+    border-radius: var(--radius-lg);
+    padding: var(--space-5);
+    color: var(--text);
+    background: var(--surface);
+    box-shadow: 0 20px 50px rgba(10, 37, 64, 0.35);
+  }
+  .briefing::backdrop { background: rgba(10, 37, 64, 0.55); }
+  .briefing__head { display: flex; align-items: flex-start; gap: var(--space-3); }
+  .briefing__icon {
+    flex: none;
+    width: 44px; height: 44px;
+    border-radius: var(--radius);
+    background: var(--brand-100);
+    color: var(--brand-800);
+    display: grid;
+    place-items: center;
+  }
+  .briefing__eyebrow { font-size: 12px; font-weight: 700; color: var(--brand-700); text-transform: uppercase; letter-spacing: 0.06em; }
+  .briefing h2 { font-size: 20px; color: var(--brand-950); line-height: 1.25; }
+  .briefing__close { margin-left: auto; }
+  .briefing__details { margin: var(--space-4) 0; display: grid; gap: var(--space-2); }
+  .briefing__details div { display: grid; grid-template-columns: 64px 1fr; gap: var(--space-2); }
+  .briefing__details dt { font-weight: 700; color: var(--text-muted); font-size: 13px; padding-top: 1px; }
+  .briefing__details dd { margin: 0; font-weight: 600; }
+  .briefing__when-rel { display: inline-block; margin-left: var(--space-1); font-size: 12px; font-weight: 700; color: var(--brand-800); background: var(--brand-100); border-radius: 999px; padding: 0 var(--space-2); }
+  .briefing__actions { display: flex; justify-content: flex-end; }
+
+  /* =========================================================
      Toasts
      ========================================================= */
   .toasts {
@@ -963,6 +997,29 @@
   </main>
 </div>
 
+<!-- =========================================================
+     Event announcement: shown once per visit after 10 s on the page
+     ========================================================= -->
+<dialog class="briefing" id="briefing" aria-labelledby="briefing-title" aria-describedby="briefing-details">
+  <div class="briefing__head">
+    <div class="briefing__icon" aria-hidden="true">
+      <svg width="24" height="24" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3"/></svg>
+    </div>
+    <div>
+      <p class="briefing__eyebrow">Upcoming event</p>
+      <h2 id="briefing-title"></h2>
+    </div>
+    <button type="button" class="icon-btn briefing__close" data-briefing-close aria-label="Close announcement">×</button>
+  </div>
+  <dl class="briefing__details" id="briefing-details">
+    <div><dt>When</dt><dd><span id="briefing-when"></span> <span class="briefing__when-rel" id="briefing-rel"></span></dd></div>
+    <div><dt>Where</dt><dd id="briefing-where"></dd></div>
+  </dl>
+  <div class="briefing__actions">
+    <button type="button" class="btn btn--primary" data-briefing-close autofocus>Got it</button>
+  </div>
+</dialog>
+
 <!-- Toast region: announced politely to screen readers -->
 <div class="toasts" id="toasts" role="status" aria-live="polite" aria-atomic="false"></div>
 
@@ -983,6 +1040,19 @@
    https://formsubmit.co/ajax/<random-alias>
    ========================================================= */
 const FORMSUBMIT_ENDPOINT = "https://formsubmit.co/ajax/YOUR_EMAIL@example.com";
+
+/* =========================================================
+   CONFIG: event announcement popup
+   `start` is local wall-clock time (YYYY-MM-DDTHH:MM). The popup
+   appears once per visit after `showAfterMs` of visible time on the
+   page, and stops appearing once the event has started.
+   ========================================================= */
+const BRIEFING = Object.freeze({
+  title: "IT Project Briefing",
+  start: "2026-10-07T14:00",
+  location: "Town Hall Meeting Room",
+  showAfterMs: 10000,
+});
 
 /* =========================================================
    Constants and security limits
@@ -1974,6 +2044,52 @@ function bindFilters() {
 }
 
 /* =========================================================
+   Event announcement: counts only visible time, waits while the
+   user is dragging or typing, then opens a modal <dialog> once
+   ========================================================= */
+function briefingStart() {
+  const [date, time] = BRIEFING.start.split("T");
+  const [h, m] = time.split(":").map(Number);
+  const d = parseISODate(date);
+  d.setHours(h, m, 0, 0);
+  return d;
+}
+
+function userIsBusy() {
+  const el = document.activeElement;
+  const typing = Boolean(el && el.matches && el.matches("input, textarea, select"));
+  return Boolean(state.ui.dragId) || typing;
+}
+
+function showBriefing() {
+  const start = briefingStart();
+  const dialog = document.getElementById("briefing");
+  const days = daysUntil(toISODate(start));
+  const date = start.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const time = start.toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit", hour12: true });
+  document.getElementById("briefing-title").textContent = BRIEFING.title;
+  document.getElementById("briefing-when").textContent = `${date}, ${time}`;
+  document.getElementById("briefing-rel").textContent = days === 0 ? "Today" : days === 1 ? "Tomorrow" : `In ${plural(days, "day")}`;
+  document.getElementById("briefing-where").textContent = BRIEFING.location;
+  dialog.querySelectorAll("[data-briefing-close]").forEach((btn) => btn.addEventListener("click", () => dialog.close()));
+  // Clicking the dimmed backdrop (outside the dialog box) also closes it
+  dialog.addEventListener("click", (e) => { if (e.target === dialog) dialog.close(); });
+  dialog.showModal();
+}
+
+function scheduleBriefing() {
+  if (!(briefingStart() > new Date())) return;
+  let visibleMs = 0;
+  const tick = setInterval(() => {
+    if (document.visibilityState !== "visible") return;
+    visibleMs += 1000;
+    if (visibleMs < BRIEFING.showAfterMs || userIsBusy()) return;
+    clearInterval(tick);
+    if (briefingStart() > new Date()) showBriefing();
+  }, 1000);
+}
+
+/* =========================================================
    Security monitoring: log anything the CSP blocks
    ========================================================= */
 function bindSecurityMonitor() {
@@ -2065,6 +2181,7 @@ function init() {
   bindAnalytics();
 
   renderBoard();
+  scheduleBriefing();
 }
 
 init();
